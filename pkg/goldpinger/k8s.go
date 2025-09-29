@@ -103,6 +103,17 @@ func getPodNodeName(p v1.Pod) string {
 	return p.Name
 }
 
+// isReady is equivalent to k8s.io/kubectl/pkg/util/podutils.IsPodReady" but that brings us up a go version
+// if we don't mind those dependencies could replace.
+func isReady(pod *v1.Pod) bool {
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == v1.PodReady && cond.Status == v1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
 // GetAllPods returns a mapping from a pod name to a pointer to a GoldpingerPod(s)
 func GetAllPods() map[string]*GoldpingerPod {
 	timer := GetLabeledKubernetesCallsTimer()
@@ -120,25 +131,14 @@ func GetAllPods() map[string]*GoldpingerPod {
 		timer.ObserveDuration()
 	}
 
-	readyPods := []v1.Pod{}
-	if GoldpingerConfig.UseReadiness {
-		// during node maintenance. readiness is helpful for knowing is connectivity broken or is a pod just starting.
-		// but it might also hide some data if node is just gone so choose wiselfy for your scenario.
-		for _, pod := range pods.Items {
-			for _, cond := range pod.Status.Conditions {
-				if cond.Type == v1.PodReady && cond.Status == v1.ConditionTrue {
-					readyPods = append(readyPods, pod)
-					continue
-				}
+	podMap := make(map[string]*GoldpingerPod)
+	for _, pod := range pods.Items {
+		if GoldpingerConfig.UseReadiness {
+			if !isReady(&pod) {
+				continue
 			}
 		}
-		pods.Items = readyPods
-	} else {
-		readyPods = pods.Items
-	}
 
-	podMap := make(map[string]*GoldpingerPod)
-	for _, pod := range readyPods {
 		podMap[pod.Name] = &GoldpingerPod{
 			Name:   getPodNodeName(pod),
 			PodIP:  getPodIP(pod),
