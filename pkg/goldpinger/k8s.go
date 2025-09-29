@@ -21,6 +21,7 @@ import (
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/kubectl/pkg/util/podutils"
 	k8snet "k8s.io/utils/net"
 )
 
@@ -120,25 +121,15 @@ func GetAllPods() map[string]*GoldpingerPod {
 		timer.ObserveDuration()
 	}
 
-	readyPods := []v1.Pod{}
-	if GoldpingerConfig.UseReadiness {
-		// during node maintenance. readiness is helpful for knowing is connectivity broken or is a pod just starting.
-		// but it might also hide some data if node is just gone so choose wiselfy for your scenario.
-		for _, pod := range pods.Items {
-			for _, cond := range pod.Status.Conditions {
-				if cond.Type == v1.PodReady && cond.Status == v1.ConditionTrue {
-					readyPods = append(readyPods, pod)
-					continue
-				}
+	podMap := make(map[string]*GoldpingerPod)
+	for _, pod := range pods.Items {
+		if GoldpingerConfig.UseReadiness {
+			if !podutils.IsPodReady(&pod) {
+				zap.L().Debug("Skipping pod that is not ready", zap.String("pod", pod.Name))
+				continue
 			}
 		}
-		pods.Items = readyPods
-	} else {
-		readyPods = pods.Items
-	}
 
-	podMap := make(map[string]*GoldpingerPod)
-	for _, pod := range readyPods {
 		podMap[pod.Name] = &GoldpingerPod{
 			Name:   getPodNodeName(pod),
 			PodIP:  getPodIP(pod),
