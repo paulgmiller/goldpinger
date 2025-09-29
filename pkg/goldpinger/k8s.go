@@ -120,8 +120,25 @@ func GetAllPods() map[string]*GoldpingerPod {
 		timer.ObserveDuration()
 	}
 
+	readyPods := []v1.Pod{}
+	if GoldpingerConfig.UseReadiness {
+		// during node maintenance. readiness is helpful for knowing is connectivity broken or is a pod just starting.
+		// but it might also hide some data if node is just gone so choose wiselfy for your scenario.
+		for _, pod := range pods.Items {
+			for _, cond := range pod.Status.Conditions {
+				if cond.Type == v1.PodReady && cond.Status == v1.ConditionTrue {
+					readyPods = append(readyPods, pod)
+					continue
+				}
+			}
+		}
+		pods.Items = readyPods
+	} else {
+		readyPods = pods.Items
+	}
+
 	podMap := make(map[string]*GoldpingerPod)
-	for _, pod := range pods.Items {
+	for _, pod := range readyPods {
 		podMap[pod.Name] = &GoldpingerPod{
 			Name:   getPodNodeName(pod),
 			PodIP:  getPodIP(pod),
