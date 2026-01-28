@@ -68,7 +68,7 @@ jobs:
           push: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
           files: |
             ./docker-bake.hcl
-            ${{ steps.meta.outputs.bake-file }}
+            cwd://${{ steps.meta.outputs.bake-file }}
 
       # https://github.com/docker/buildx/issues/2105
       - name: Create manifest
